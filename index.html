@@ -18,7 +18,6 @@
         .btn:hover { background: #4cae4c; }
         .btn-danger { background: #d9534f; }
         .btn-danger:hover { background: #c9302c; }
-        .empty-message { text-align: center; color: #777; padding: 20px; }
         
         /* カート・管理者エリア */
         .cart, .admin-panel { margin-top: 20px; padding: 15px; background: #f0f0f0; border-radius: 6px; }
@@ -52,7 +51,7 @@
 
     <!-- 管理者エリアの切り替えボタン -->
     <div class="admin-toggle">
-        <button id="adminToggleBtn" onclick="toggleAdmin()" style="background: #666; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">🛠️ 管理者画面を開く</button>
+        <button onclick="toggleAdmin()" style="background: #666; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">🛠️ 管理者画面を表示/非表示</button>
     </div>
 
     <!-- 管理者側画面 -->
@@ -72,18 +71,18 @@
                 <input type="number" id="menuPrice" placeholder="例: 850">
             </div>
             <button class="btn" style="width: 100%; margin-top: 10px;" onclick="addMenu()">✨ 新しいメニューを追加する</button>
-            <button class="btn btn-danger" style="width: 100%; margin-top: 10px;" onclick="logoutAdmin()">🔒 管理者画面を閉じる（ロック）</button>
         </div>
     </div>
 
     <script>
-        // パスワードの設定（ここを好きな数字や文字に変えられます）
-        const ADMIN_PASSWORD = "1234";
+        // 初期メニューデータ（番号、名前、価格）
+        let menus = [
+            { id: 1, name: "デミグラスハンバーグ", price: 780 },
+            { id: 2, name: "たっぷり特製カレー", price: 650 },
+            { id: 3, name: "ドリンクバー", price: 290 }
+        ];
 
-        // ブラウザの保存領域（LocalStorage）からデータを読み込む。なければ空っぽにする。
-        let menus = JSON.parse(localStorage.getItem('famires_menus')) || [];
         let cart = [];
-        let isAdminLoggedIn = false; // 管理者ログイン状態
 
         // 画面を更新する関数
         function updateDisplay() {
@@ -92,25 +91,21 @@
             const menuListUl = document.getElementById('menuList');
             menuListUl.innerHTML = '';
             
-            if (menus.length === 0) {
-                menuListUl.innerHTML = '<div class="empty-message">メニューが登録されていません。<br>管理者画面から追加してください。</div>';
-            } else {
-                menus.forEach(item => {
-                    const li = document.createElement('li');
-                    li.className = 'menu-item';
-                    li.innerHTML = `
-                        <div>
-                            <span class="menu-number">${item.id}</span>
-                            <strong>${item.name}</strong> - ${item.price}円
-                        </div>
-                        <div>
-                            <button class="btn" onclick="addToCart(${item.id})">注文</button>
-                            <button class="btn btn-danger hidden-admin-btn" style="display:none; margin-left:5px; padding:3px 6px; font-size:12px;" onclick="deleteMenu(${item.id})">削除</button>
-                        </div>
-                    `;
-                    menuListUl.appendChild(li);
-                });
-            }
+            menus.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'menu-item';
+                li.innerHTML = `
+                    <div>
+                        <span class="menu-number">${item.id}</span>
+                        <strong>${item.name}</strong> - ${item.price}円
+                    </div>
+                    <div>
+                        <button class="btn" onclick="addToCart(${item.id})">注文</button>
+                        <button class="btn btn-danger hidden-admin-btn" style="display:none; margin-left:5px; padding:3px 6px; font-size:12px;" onclick="deleteMenu(${item.id})">削除</button>
+                    </div>
+                `;
+                menuListUl.appendChild(li);
+            });
 
             // カートの表示更新
             const cartListUl = document.getElementById('cartList');
@@ -127,25 +122,12 @@
 
             document.getElementById('totalPrice').innerText = total;
             
-            // 管理者モードの表示コントロール
+            // 管理者モードのボタン表示状態を維持
             const adminPanel = document.getElementById('adminPanel');
-            const toggleBtn = document.getElementById('adminToggleBtn');
             const deleteBtns = document.querySelectorAll('.hidden-admin-btn');
-            
-            if (isAdminLoggedIn) {
-                adminPanel.classList.remove('hidden');
-                toggleBtn.style.display = 'none'; // ログイン中は開くボタンを隠す
-                deleteBtns.forEach(btn => btn.style.display = 'inline-block'); // 削除ボタンを表示
-            } else {
-                adminPanel.classList.add('hidden');
-                toggleBtn.style.display = 'inline-block';
-                deleteBtns.forEach(btn => btn.style.display = 'none'); // 削除ボタンを隠す
-            }
-        }
-
-        // データをブラウザに保存する関数
-        function saveToStorage() {
-            localStorage.setItem('famires_menus', JSON.stringify(menus));
+            deleteBtns.forEach(btn => {
+                btn.style.display = adminPanel.classList.contains('hidden') ? 'none' : 'inline-block';
+            });
         }
 
         // カートに商品を追加
@@ -169,30 +151,16 @@
                 alert('カートに商品が入っていません。');
                 return;
             }
-            alert('注文が完了しました！');
+            alert('注文が完了しました！厨房へ送信します。');
             cart = [];
             updateDisplay();
         }
 
-        // 管理者画面の認証と表示
+        // 管理者画面の表示・非表示切り替え
         function toggleAdmin() {
-            if (!isAdminLoggedIn) {
-                const inputPassword = prompt('管理者パスワードを入力してください:');
-                if (inputPassword === ADMIN_PASSWORD) {
-                    isAdminLoggedIn = true;
-                    alert('ログインしました。');
-                } else if (inputPassword !== null) {
-                    alert('パスワードが違います。');
-                }
-            }
+            const adminPanel = document.getElementById('adminPanel');
+            adminPanel.classList.toggle('hidden');
             updateDisplay();
-        }
-
-        // 管理者画面のログアウト（ロック）
-        function logoutAdmin() {
-            isAdminLoggedIn = false;
-            updateDisplay();
-            alert('管理者画面をロックしました。');
         }
 
         // 管理者機能：メニューの追加
@@ -219,9 +187,6 @@
             // メニュー追加
             menus.push({ id, name, price });
             
-            // ブラウザへ保存
-            saveToStorage();
-
             // 入力欄をクリア
             idInput.value = '';
             nameInput.value = '';
@@ -235,7 +200,6 @@
         function deleteMenu(id) {
             if (confirm(`商品番号 ${id} 番を削除してもよろしいですか？`)) {
                 menus = menus.filter(m => m.id !== id);
-                saveToStorage(); // 削除後の状態を保存
                 updateDisplay();
             }
         }
