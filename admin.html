@@ -15,7 +15,6 @@
         .btn { background: #5cb85c; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; width: 100%; font-size: 1em; box-sizing: border-box; }
         .btn-danger { background: #d9534f; width: auto; padding: 4px 8px; font-size: 12px; }
         
-        /* 💡 スマホ画面での横幅はみ出しを確実に防止する設定 */
         .form-group { margin-bottom: 12px; width: 100%; box-sizing: border-box; }
         .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
         .form-group input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; display: block; }
@@ -181,165 +180,63 @@
             localStorage.setItem('famires_orders', JSON.stringify(orders));
             updateOrderDisplay();
         }
-                const ADMIN_PASSWORD = "0404";
-        let menus = JSON.parse(localStorage.getItem('famires_menus')) || [];
-        let orders = JSON.parse(localStorage.getItem('famires_orders')) || [];
-        let peerConnection;
-        let remoteChannel;
-
-        function checkPassword() {
-            const input = prompt('管理者パスワードを入力してください:');
-            if (input === ADMIN_PASSWORD) {
-                document.getElementById('authLock').classList.add('hidden');
-                document.getElementById('adminContent').classList.remove('hidden');
-                updateAdminDisplay();
-                updateOrderDisplay();
-            } else {
-                alert('パスワードが違います。');
-                window.location.reload();
-            }
-        }
-
-        const config = { iceServers: [] };
-
-        function acceptOffer() {
-            const offerText = document.getElementById('offerInput').value.trim();
-            if(!offerText) return alert("文字列を入力してください");
-
-            try {
-                const offer = JSON.parse(decodeURIComponent(escape(atob(offerText))));
-                peerConnection = new RTCPeerConnection(config);
-
-                peerConnection.onicecandidate = (e) => {
-                    if (!e.candidate) {
-                        const localAnswerB64 = btoa(unescape(encodeURIComponent(JSON.stringify(peerConnection.localDescription))));
-                        document.getElementById('setupArea').innerHTML = `
-                            <h3>🔗 接続の最終ステップ</h3>
-                            <p style="font-size:12px; color:green; font-weight:bold;">下の文字列をすべてコピーして、Chromebook側に貼り付けて確定してください</p>
-                            <textarea id="localAnswer" readonly>${localAnswerB64}</textarea>
-                            <button class="btn" style="margin-top:10px; background:#4cae4c;" onclick="document.getElementById('localAnswer').select(); document.execCommand('copy'); alert('コピーしました！');">コピーする</button>
-                        `;
-                    }
-                };
-
-                peerConnection.ondatachannel = (e) => {
-                    remoteChannel = e.channel;
-                    remoteChannel.onopen = () => {
-                        document.getElementById('setupArea').innerHTML = "<h3 style='color:green; margin:0;'>✅ タブレットと接続完了！</h3>";
-                        syncMenusToCustomer();
-                    };
-                    remoteChannel.onmessage = (evt) => {
-                        const data = JSON.parse(evt.evt.data);
-                        if (data.type === "newOrder") {
-                            orders.push(data.order);
-                            localStorage.setItem('famires_orders', JSON.stringify(orders));
-                            updateOrderDisplay();
-                        }
-                    };
-                };
-
-                peerConnection.setRemoteDescription(new RTCSessionDescription(offer))
-                    .then(() => peerConnection.createAnswer())
-                    .then(answer => peerConnection.setLocalDescription(answer));
-
-            } catch(err) {
-                alert("正しく読み込めませんでした。");
-            }
-        }
-
-        function syncMenusToCustomer() {
-            if (remoteChannel && remoteChannel.readyState === "open") {
-                remoteChannel.send(JSON.stringify({ type: "syncMenus", menus: menus }));
-            }
-        }
-
-        function updateAdminDisplay() {
-            menus.sort((a, b) => a.id - b.id);
-            const ul = document.getElementById('adminMenuList');
-            ul.innerHTML = '';
-            menus.forEach(item => {
-                const li = document.createElement('li');
-                li.className = 'menu-item';
-                li.innerHTML = `<div><span class="menu-number">${item.id}</span><strong>${item.name}</strong> - ${item.price}円</div><button class="btn btn-danger" onclick="deleteMenu(${item.id})">削除</button>`;
-                ul.appendChild(li);
-            });
-        }
-
-        function updateOrderDisplay() {
-            const orderListDiv = document.getElementById('orderList');
-            orderListDiv.innerHTML = '';
-            if (orders.length === 0) {
-                orderListDiv.innerHTML = '<div style="text-align:center; color:#777; padding:20px;">現在、新しい注文はありません。</div>';
-                return;
-            }
-            for (let i = orders.length - 1; i >= 0; i--) {
-                const order = orders[i];
-                const card = document.createElement('div');
-                card.className = 'order-card';
-                const itemCounts = {};
-                order.items.forEach(item => {
-                    itemCounts[item.id] = itemCounts[item.id] ? { name: item.name, count: itemCounts[item.id].count + 1 } : { name: item.name, count: 1 };
-                });
-                let itemsHtml = '<ul>';
-                for (const id in itemCounts) { itemsHtml += `<li>【${id}】 <strong>${itemCounts[id].name}</strong> - <span style="color:#d9534f; font-weight:bold;">${itemCounts[id].count}点</span></li>`; }
-                itemsHtml += '</ul>';
-
-                card.innerHTML = `<div class="order-header"><span>⏰ 注文時刻: ${order.time}</span><span style="color:#d9534f;">状態: ${order.status}</span></div><div style="padding: 10px 0;">${itemsHtml}</div><div style="display:flex; justify-content:space-between; align-items:center; border-top:1px dashed #eee; padding-top:5px;"><span>合計金額: <strong>${order.total}円</strong></span><button class="btn" style="width:120px; padding:5px; background:#0288d1;" onclick="completeOrder(${order.id})">配膳完了 / 消去</button></div>`;
-                orderListDiv.appendChild(card);
-            }
-        }
-
-        function completeOrder(orderId) {
-            orders = orders.filter(o => o.id !== orderId);
-            localStorage.setItem('famires_orders', JSON.stringify(orders));
-            updateOrderDisplay();
-        }
-
-        /* 💡 ここから下が先ほどお送りした折り返し修正版コードです */
         function addMenu() {
-            const idInput = document.getElementById('menuId');
-            const nameInput = document.getElementById('menuName');
-            const priceInput = document.getElementById('menuPrice');
+    const idInput = 
+        document.getElementById('menuId');
+    const nameInput = 
+        document.getElementById('menuName');
+    const priceInput = 
+        document.getElementById('menuPrice');
 
-            const id = parseInt(idInput.value);
-            const name = nameInput.value.trim();
-            const price = parseInt(priceInput.value);
+    const id = parseInt(idInput.value);
+    const name = nameInput.value.trim();
+    const price = parseInt(priceInput.value);
 
-            if (!id || !name || !price) {
-                alert('入力が正しくありません。');
-                return;
-            }
+    if (!id || !name || !price) {
+        alert('入力が正しくありません。');
+        return;
+    }
 
-            if (menus.some(m => m.id === id)) {
-                alert(`商品番号 ${id} 番は登録済みです。`);
-                return;
-            }
+    if (menus.some(m => m.id === id)) {
+        alert(`商品番号 ${id} 番は登録済みです。`);
+        return;
+    }
 
-            menus.push({ id, name, price });
-            localStorage.setItem('famires_menus', JSON.stringify(menus));
+    menus.push({ id, name, price });
+    localStorage.setItem(
+        'famires_menus', 
+        JSON.stringify(menus)
+    );
 
-            idInput.value = '';
-            nameInput.value = '';
-            priceInput.value = '';
+    idInput.value = '';
+    nameInput.value = '';
+    priceInput.value = '';
 
-            updateAdminDisplay();
-            syncMenusToCustomer();
-        }
+    updateAdminDisplay();
+    syncMenusToCustomer();
+}
 
-        function deleteMenu(id) {
-            if (confirm(`商品番号 ${id} 番のメニューを削除しますか？`)) {
-                menus = menus.filter(m => m.id !== id);
-                localStorage.setItem('famires_menus', JSON.stringify(menus));
-                updateAdminDisplay();
-                syncMenusToCustomer();
-            }
-        }
+function deleteMenu(id) {
+    if (confirm(
+        `商品番号 ${id} 番のメニューを削除しますか？`
+    )) {
+        menus = menus.filter(
+            m => m.id !== id
+        );
+        localStorage.setItem(
+            'famires_menus', 
+            JSON.stringify(menus)
+        );
+        updateAdminDisplay();
+        syncMenusToCustomer();
+    }
+}
 
-        checkPassword();
+checkPassword();
     </script>
 </body>
 </html>
 
 
         function addMenu() {
-
+            const idInput = document.getElementById('menuId');
