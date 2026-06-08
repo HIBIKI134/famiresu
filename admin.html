@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>管理者画面 - メニュー設定 & 注文管理</title>
+    <!-- QRコード生成用ライブラリを読み込み -->
+    <script src="https://cloudflare.com"></script>
     <style>
         body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
         h1, h2 { text-align: center; color: #333; }
@@ -20,6 +22,10 @@
         .hidden { display: none; }
         .order-card { background: #fffde7; border: 1px solid #fff59d; padding: 10px; margin-bottom: 10px; border-radius: 6px; }
         .order-header { display: flex; justify-content: space-between; font-weight: bold; border-bottom: 1px dashed #ccc; padding-bottom: 5px; }
+        
+        /* QR表示用のスタイル */
+        .conn-box { background: #e8f5e9; padding: 15px; border-radius: 6px; margin-bottom: 20px; text-align: center; }
+        #qr { margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -31,30 +37,27 @@
 
     <div id="adminContent" class="hidden">
         <h1>🛠️ 管理者コントロールパネル</h1>
-        <p style="text-align: center;"><a href="index.html" target="_blank">👉 お客さん用の注文画面を開く</a></p>
+
+        <!-- QRコード提示エリア -->
+        <div class="container">
+            <div class="panel conn-box" id="setupArea">
+                <h3>🔗 タブレットと直接接続する</h3>
+                <p style="font-size:12px; margin:5px 0;">Chromebookのカメラで下のQRコードを読み取らせてください</p>
+                <canvas id="qr"></canvas>
+            </div>
+        </div>
 
         <div class="container">
-            <!-- 注文確認画面 -->
             <div class="panel" style="border-top: 4px solid #0288d1; max-width: 600px; flex: 2;">
                 <h2>📥 受信した注文一覧</h2>
                 <div id="orderList"></div>
             </div>
 
-            <!-- メニュー追加フォーム -->
             <div class="panel" style="border-top: 4px solid #d9534f;">
                 <h2>✨ 新しいメニューを追加</h2>
-                <div class="form-group">
-                    <label>商品番号 (半角数字):</label>
-                    <input type="number" id="menuId" placeholder="例: 101">
-                </div>
-                <div class="form-group">
-                    <label>メニュー名:</label>
-                    <input type="text" id="menuName" placeholder="例: 特製ハンバーグ">
-                </div>
-                <div class="form-group">
-                    <label>価格 (円):</label>
-                    <input type="number" id="menuPrice" placeholder="例: 850">
-                </div>
+                <div class="form-group"><label>商品番号:</label><input type="number" id="menuId"></div>
+                <div class="form-group"><label>メニュー名:</label><input type="text" id="menuName"></div>
+                <div class="form-group"><label>価格 (円):</label><input type="number" id="menuPrice"></div>
                 <button class="btn" onclick="addMenu()">メニューを登録する</button>
 
                 <h2 style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 15px;">📋 登録中のメニュー</h2>
@@ -64,11 +67,11 @@
     </div>
 
     <script>
-        // 設定されたパスワード「0404」を維持しています
         const ADMIN_PASSWORD = "0404";
-
         let menus = JSON.parse(localStorage.getItem('famires_menus')) || [];
         let orders = JSON.parse(localStorage.getItem('famires_orders')) || [];
+        let peerConnection;
+        let remoteChannel;
 
         function checkPassword() {
             const input = prompt('管理者パスワードを入力してください:');
@@ -77,77 +80,92 @@
                 document.getElementById('adminContent').classList.remove('hidden');
                 updateAdminDisplay();
                 updateOrderDisplay();
+                initWebRTC(); // 認証成功後に通信を開始
             } else {
                 alert('パスワードが違います。');
-                window.location.href = 'index.html';
+                window.location.reload();
             }
         }
 
+        // --- WebRTC接続処理（QRコード発行） ---
+        const config = { iceServers: [{ urls: "stun:://google.com" }] };
+
+        function initWebRTC() {
+            // お客さん側のタブレットが生成したシグナルを受け取る代わりに、今回は自分(スマホ)側を起点にする
+            peerConnection = new RTCPeerConnection(config);
+
+            peerConnection.onicecandidate = (e) => {
+                if (!e.candidate) {
+                    const localDescriptionB64 = btoa(JSON.stringify(peerConnection.localDescription));
+                    // 自身の接続情報をQRコードに変換して画面に描画
+                    new QRious({
+                        element: document.getElementById('qr'),
+                        value: localDescriptionB64,
+                        size: 200
+                    });
+                }
+            };
+
+            peerConnection.ondatachannel = (e) => {
+                remoteChannel = e.channel;
+                remoteChannel.onopen = () => {
+                    document.getElementById('setupArea').innerHTML = "<h3 style='color:green; margin:0;'>✅ タブレットと接続完了！</h3>";
+                    syncMenusToCustomer();
+                };
+                remoteChannel.onmessage = (evt) => {
+                    const data = JSON.parse(evt.data);
+                    if (data.type === "newOrder") {
+                        orders.push(data.order);
+                        localStorage.setItem('famires_orders', JSON.stringify(orders));
+                        updateOrderDisplay();
+                    }
+                };
+            };
+
+            // ダミーのデータチャンネルを作成してOfferを誘発
+            peerConnection.createDataChannel("dummy");
+            peerConnection.createOffer().then(offer => peerConnection.setLocalDescription(offer));
+        }
+
+        function syncMenusToCustomer() {
+            if (remoteChannel && remoteChannel.readyState === "open") {
+                remoteChannel.send(JSON.stringify({ type: "syncMenus", menus: menus }));
+            }
+        }
+
+        // --- 画面表示とメニュー管理 ---
         function updateAdminDisplay() {
             menus.sort((a, b) => a.id - b.id);
             const ul = document.getElementById('adminMenuList');
             ul.innerHTML = '';
-
-            if (menus.length === 0) {
-                ul.innerHTML = '<li style="text-align:center; color:#777;">メニューはありません。</li>';
-                return;
-            }
-
             menus.forEach(item => {
                 const li = document.createElement('li');
                 li.className = 'menu-item';
-                li.innerHTML = `
-                    <div><span class="menu-number">${item.id}</span><strong>${item.name}</strong> - ${item.price}円</div>
-                    <button class="btn btn-danger" onclick="deleteMenu(${item.id})">削除</button>
-                `;
+                li.innerHTML = `<div><span class="menu-number">${item.id}</span><strong>${item.name}</strong> - ${item.price}円</div><button class="btn btn-danger" onclick="deleteMenu(${item.id})">削除</button>`;
                 ul.appendChild(li);
             });
         }
 
-        // 💡 注文個数を正しく計算して表示するように修正しました
         function updateOrderDisplay() {
             const orderListDiv = document.getElementById('orderList');
             orderListDiv.innerHTML = '';
-
             if (orders.length === 0) {
                 orderListDiv.innerHTML = '<div style="text-align:center; color:#777; padding:20px;">現在、新しい注文はありません。</div>';
                 return;
             }
-
             for (let i = orders.length - 1; i >= 0; i--) {
                 const order = orders[i];
                 const card = document.createElement('div');
                 card.className = 'order-card';
-
-                // カート内の同じ商品をカウントする処理
                 const itemCounts = {};
                 order.items.forEach(item => {
-                    if (itemCounts[item.id]) {
-                        itemCounts[item.id].count += 1;
-                    } else {
-                        itemCounts[item.id] = { name: item.name, count: 1 };
-                    }
+                    itemCounts[item.id] = itemCounts[item.id] ? { name: item.name, count: itemCounts[item.id].count + 1 } : { name: item.name, count: 1 };
                 });
-
                 let itemsHtml = '<ul>';
-                for (const id in itemCounts) {
-                    itemsHtml += `<li>【${id}】 <strong>${itemCounts[id].name}</strong> - <span style="color:#d9534f; font-weight:bold;">${itemCounts[id].count}点</span></li>`;
-                }
+                for (const id in itemCounts) { itemsHtml += `<li>【${id}】 <strong>${itemCounts[id].name}</strong> - <span style="color:#d9534f; font-weight:bold;">${itemCounts[id].count}点</span></li>`; }
                 itemsHtml += '</ul>';
 
-                card.innerHTML = `
-                    <div class="order-header">
-                        <span>⏰ 注文時刻: ${order.time}</span>
-                        <span style="color:#d9534f;">状態: ${order.status}</span>
-                    </div>
-                    <div style="padding: 10px 0;">
-                        ${itemsHtml}
-                    </div>
-                    <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px dashed #eee; padding-top:5px;">
-                        <span>合計金額: <strong>${order.total}円</strong></span>
-                        <button class="btn" style="width:120px; padding:5px; background:#0288d1;" onclick="completeOrder(${order.id})">配膳完了 / 消去</button>
-                    </div>
-                `;
+                card.innerHTML = `<div class="order-header"><span>⏰ 注文時刻: ${order.time}</span><span style="color:#d9534f;">状態: ${order.status}</span></div><div style="padding: 10px 0;">${itemsHtml}</div><div style="display:flex; justify-content:space-between; align-items:center; border-top:1px dashed #eee; padding-top:5px;"><span>合計金額: <strong>${order.total}円</strong></span><button class="btn" style="width:120px; padding:5px; background:#0288d1;" onclick="completeOrder(${order.id})">配膳完了 / 消去</button></div>`;
                 orderListDiv.appendChild(card);
             }
         }
@@ -159,43 +177,25 @@
         }
 
         function addMenu() {
-            const idInput = document.getElementById('menuId');
-            const nameInput = document.getElementById('menuName');
-            const priceInput = document.getElementById('menuPrice');
-
-            const id = parseInt(idInput.value);
-            const name = nameInput.value.trim();
-            const price = parseInt(priceInput.value);
-
-            if (!id || !name || !price) {
-                alert('入力が正しくありません。');
-                return;
-            }
-
-            if (menus.some(m => m.id === id)) {
-                alert(`商品番号 ${id} 番は登録済みです。`);
-                return;
-            }
-
+            const id = parseInt(document.getElementById('menuId').value);
+            const name = document.getElementById('menuName').value.trim();
+            const price = parseInt(document.getElementById('menuPrice').value);
+            if (!id || !name || !price || menus.some(m => m.id === id)) return alert('入力が正しくないか、既に登録されています。');
             menus.push({ id, name, price });
             localStorage.setItem('famires_menus', JSON.stringify(menus));
-
-            idInput.value = ''; nameInput.value = ''; priceInput.value = '';
+            document.getElementById('menuId').value = ''; document.getElementById('menuName').value = ''; document.getElementById('menuPrice').value = '';
             updateAdminDisplay();
+            syncMenusToCustomer();
         }
 
         function deleteMenu(id) {
-            if (confirm('削除しますか？')) {
+            if (confirm(`商品番号 ${id} 番のメニューを削除しますか？`)) {
                 menus = menus.filter(m => m.id !== id);
                 localStorage.setItem('famires_menus', JSON.stringify(menus));
                 updateAdminDisplay();
+                syncMenusToCustomer();
             }
         }
-
-        window.addEventListener('storage', () => {
-            orders = JSON.parse(localStorage.getItem('famires_orders')) || [];
-            updateOrderDisplay();
-        });
 
         checkPassword();
     </script>
