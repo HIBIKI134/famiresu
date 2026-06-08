@@ -64,7 +64,7 @@
     </div>
 
     <script>
-        // 管理者パスワード（自由に変更してください）
+        // 設定されたパスワード「0404」を維持しています
         const ADMIN_PASSWORD = "0404";
 
         let menus = JSON.parse(localStorage.getItem('famires_menus')) || [];
@@ -97,13 +97,14 @@
                 const li = document.createElement('li');
                 li.className = 'menu-item';
                 li.innerHTML = `
-                    <div><span class="menu-number">${item.id}</span><strong>${item.name}</strong></div>
+                    <div><span class="menu-number">${item.id}</span><strong>${item.name}</strong> - ${item.price}円</div>
                     <button class="btn btn-danger" onclick="deleteMenu(${item.id})">削除</button>
                 `;
                 ul.appendChild(li);
             });
         }
 
+        // 💡 注文個数を正しく計算して表示するように修正しました
         function updateOrderDisplay() {
             const orderListDiv = document.getElementById('orderList');
             orderListDiv.innerHTML = '';
@@ -118,10 +119,20 @@
                 const card = document.createElement('div');
                 card.className = 'order-card';
 
-                let itemsHtml = '<ul>';
+                // カート内の同じ商品をカウントする処理
+                const itemCounts = {};
                 order.items.forEach(item => {
-                    itemsHtml += `<li>【${item.id}】 <strong>${item.name}</strong> - 1点</li>`;
+                    if (itemCounts[item.id]) {
+                        itemCounts[item.id].count += 1;
+                    } else {
+                        itemCounts[item.id] = { name: item.name, count: 1 };
+                    }
                 });
+
+                let itemsHtml = '<ul>';
+                for (const id in itemCounts) {
+                    itemsHtml += `<li>【${id}】 <strong>${itemCounts[id].name}</strong> - <span style="color:#d9534f; font-weight:bold;">${itemCounts[id].count}点</span></li>`;
+                }
                 itemsHtml += '</ul>';
 
                 card.innerHTML = `
