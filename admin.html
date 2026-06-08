@@ -4,28 +4,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>管理者画面 - メニュー設定 & 注文管理</title>
-    <!-- QRコード生成用ライブラリを読み込み -->
-    <script src="https://cloudflare.com"></script>
     <style>
         body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
         h1, h2 { text-align: center; color: #333; }
-        .container { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; margin-top: 20px; }
-        .panel { flex: 1; min-width: 320px; max-width: 500px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .container { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; margin-top: 20px; width: 100%; box-sizing: border-box; }
+        .panel { flex: 1; min-width: 280px; max-width: 500px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); box-sizing: border-box; width: 100%; }
         .menu-list { list-style: none; padding: 0; }
         .menu-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee; }
         .menu-number { background: #666; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-right: 10px; }
-        .btn { background: #5cb85c; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; width: 100%; font-size: 1em; }
+        .btn { background: #5cb85c; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; width: 100%; font-size: 1em; box-sizing: border-box; }
         .btn-danger { background: #d9534f; width: auto; padding: 4px 8px; font-size: 12px; }
-        .form-group { margin-bottom: 12px; }
+        
+        /* 💡 スマホ画面での横幅はみ出しを確実に防止する設定 */
+        .form-group { margin-bottom: 12px; width: 100%; box-sizing: border-box; }
         .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
-        .form-group input { width: 93%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        .form-group input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; display: block; }
+        
         .hidden { display: none; }
-        .order-card { background: #fffde7; border: 1px solid #fff59d; padding: 10px; margin-bottom: 10px; border-radius: 6px; }
+        .order-card { background: #fffde7; border: 1px solid #fff59d; padding: 10px; margin-bottom: 10px; border-radius: 6px; box-sizing: border-box; width: 100%; }
         .order-header { display: flex; justify-content: space-between; font-weight: bold; border-bottom: 1px dashed #ccc; padding-bottom: 5px; }
         
-        /* QR表示用のスタイル */
-        .conn-box { background: #e8f5e9; padding: 15px; border-radius: 6px; margin-bottom: 20px; text-align: center; }
-        #qr { margin-top: 10px; }
+        .conn-box { background: #e8f5e9; padding: 15px; border-radius: 6px; margin-bottom: 20px; text-align: center; box-sizing: border-box; width: 100%; }
+        .conn-box textarea { width: 100%; height: 60px; margin-top: 5px; box-sizing: border-box; resize: none; display: block; border: 1px solid #ccc; border-radius: 4px; padding: 5px; }
     </style>
 </head>
 <body>
@@ -38,12 +38,13 @@
     <div id="adminContent" class="hidden">
         <h1>🛠️ 管理者コントロールパネル</h1>
 
-        <!-- QRコード提示エリア -->
+        <!-- 接続エリア -->
         <div class="container">
             <div class="panel conn-box" id="setupArea">
-                <h3>🔗 タブレットと直接接続する</h3>
-                <p style="font-size:12px; margin:5px 0;">Chromebookのカメラで下のQRコードを読み取らせてください</p>
-                <canvas id="qr"></canvas>
+                <h3>🔗 タブレットと直接接続する (ステップ1)</h3>
+                <p style="font-size:12px; margin:5px 0;">Chromebook側の「合言葉」を、一旦ここに貼り付けてください</p>
+                <textarea id="offerInput" placeholder="ここに貼り付けます"></textarea>
+                <button class="btn" style="margin-top:10px;" onclick="acceptOffer()">合言葉を発行する</button>
             </div>
         </div>
 
@@ -80,51 +81,57 @@
                 document.getElementById('adminContent').classList.remove('hidden');
                 updateAdminDisplay();
                 updateOrderDisplay();
-                initWebRTC(); // 認証成功後に通信を開始
             } else {
                 alert('パスワードが違います。');
                 window.location.reload();
             }
         }
 
-        // --- WebRTC接続処理（QRコード発行） ---
-        const config = { iceServers: [{ urls: "stun:://google.com" }] };
+        const config = { iceServers: [] };
 
-        function initWebRTC() {
-            // お客さん側のタブレットが生成したシグナルを受け取る代わりに、今回は自分(スマホ)側を起点にする
-            peerConnection = new RTCPeerConnection(config);
+        function acceptOffer() {
+            const offerText = document.getElementById('offerInput').value.trim();
+            if(!offerText) return alert("文字列を入力してください");
 
-            peerConnection.onicecandidate = (e) => {
-                if (!e.candidate) {
-                    const localDescriptionB64 = btoa(JSON.stringify(peerConnection.localDescription));
-                    // 自身の接続情報をQRコードに変換して画面に描画
-                    new QRious({
-                        element: document.getElementById('qr'),
-                        value: localDescriptionB64,
-                        size: 200
-                    });
-                }
-            };
+            try {
+                const offer = JSON.parse(decodeURIComponent(escape(atob(offerText))));
+                peerConnection = new RTCPeerConnection(config);
 
-            peerConnection.ondatachannel = (e) => {
-                remoteChannel = e.channel;
-                remoteChannel.onopen = () => {
-                    document.getElementById('setupArea').innerHTML = "<h3 style='color:green; margin:0;'>✅ タブレットと接続完了！</h3>";
-                    syncMenusToCustomer();
-                };
-                remoteChannel.onmessage = (evt) => {
-                    const data = JSON.parse(evt.data);
-                    if (data.type === "newOrder") {
-                        orders.push(data.order);
-                        localStorage.setItem('famires_orders', JSON.stringify(orders));
-                        updateOrderDisplay();
+                peerConnection.onicecandidate = (e) => {
+                    if (!e.candidate) {
+                        const localAnswerB64 = btoa(unescape(encodeURIComponent(JSON.stringify(peerConnection.localDescription))));
+                        document.getElementById('setupArea').innerHTML = `
+                            <h3>🔗 接続の最終ステップ</h3>
+                            <p style="font-size:12px; color:green; font-weight:bold;">下の文字列をすべてコピーして、Chromebook側に貼り付けて確定してください</p>
+                            <textarea id="localAnswer" readonly>${localAnswerB64}</textarea>
+                            <button class="btn" style="margin-top:10px; background:#4cae4c;" onclick="document.getElementById('localAnswer').select(); document.execCommand('copy'); alert('コピーしました！');">コピーする</button>
+                        `;
                     }
                 };
-            };
 
-            // ダミーのデータチャンネルを作成してOfferを誘発
-            peerConnection.createDataChannel("dummy");
-            peerConnection.createOffer().then(offer => peerConnection.setLocalDescription(offer));
+                peerConnection.ondatachannel = (e) => {
+                    remoteChannel = e.channel;
+                    remoteChannel.onopen = () => {
+                        document.getElementById('setupArea').innerHTML = "<h3 style='color:green; margin:0;'>✅ タブレットと接続完了！</h3>";
+                        syncMenusToCustomer();
+                    };
+                    remoteChannel.onmessage = (evt) => {
+                        const data = JSON.parse(evt.data);
+                        if (data.type === "newOrder") {
+                            orders.push(data.order);
+                            localStorage.setItem('famires_orders', JSON.stringify(orders));
+                            updateOrderDisplay();
+                        }
+                    };
+                };
+
+                peerConnection.setRemoteDescription(new RTCSessionDescription(offer))
+                    .then(() => peerConnection.createAnswer())
+                    .then(answer => peerConnection.setLocalDescription(answer));
+
+            } catch(err) {
+                alert("正しく読み込めませんでした。");
+            }
         }
 
         function syncMenusToCustomer() {
@@ -133,7 +140,6 @@
             }
         }
 
-        // --- 画面表示とメニュー管理 ---
         function updateAdminDisplay() {
             menus.sort((a, b) => a.id - b.id);
             const ul = document.getElementById('adminMenuList');
@@ -177,13 +183,36 @@
         }
 
         function addMenu() {
-            const id = parseInt(document.getElementById('menuId').value);
-            const name = document.getElementById('menuName').value.trim();
-            const price = parseInt(document.getElementById('menuPrice').value);
-            if (!id || !name || !price || menus.some(m => m.id === id)) return alert('入力が正しくないか、既に登録されています。');
+        function addMenu() {
+            const idInput = document.getElementById('menuId');
+            const nameInput = document.getElementById('menuName');
+            const priceInput = document.getElementById('menuPrice');
+
+            const id = parseInt(idInput.value);
+            const name = nameInput.value.trim();
+            const price = parseInt(priceInput.value);
+
+            // 入力チェック
+            if (!id || !name || !price) {
+                alert('入力が正しくありません。');
+                return;
+            }
+
+            // 重複チェック
+            if (menus.some(m => m.id === id)) {
+                alert(`商品番号 ${id} 番は登録済みです。`);
+                return;
+            }
+
+            // データの追加と保存
             menus.push({ id, name, price });
             localStorage.setItem('famires_menus', JSON.stringify(menus));
-            document.getElementById('menuId').value = ''; document.getElementById('menuName').value = ''; document.getElementById('menuPrice').value = '';
+
+            // 入力欄をクリア
+            idInput.value = '';
+            nameInput.value = '';
+            priceInput.value = '';
+
             updateAdminDisplay();
             syncMenusToCustomer();
         }
@@ -198,6 +227,3 @@
         }
 
         checkPassword();
-    </script>
-</body>
-</html>
