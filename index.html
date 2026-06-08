@@ -20,7 +20,7 @@
 </head>
 <body>
 
-    <h1>🍴 ファミレス注文タブレット</h1>
+    <h1>注文タブレット</h1>
 
     <div class="container">
         <div class="panel">
@@ -28,7 +28,7 @@
             <ul id="menuList" class="menu-list"></ul>
 
             <div class="cart">
-                <h3>🛒 注文カート</h3>
+                <h3>注文カート</h3>
                 <ul id="cartList" style="padding-left: 20px;"></ul>
                 <p style="font-size: 1.2em; font-weight: bold; text-align: right;">合計金額: <span id="totalPrice">0</span>円</p>
                 <button class="btn" style="width: 100%; padding: 10px; font-size: 1.1em;" onclick="submitOrder()">注文を確定する</button>
@@ -113,7 +113,7 @@
             allOrders.push(newOrder);
             localStorage.setItem('famires_orders', JSON.stringify(allOrders));
 
-            alert('注文が完了しました！厨房へ送信しました。');
+            alert('注文が完了しました！');
             cart = [];
             updateDisplay();
         }
