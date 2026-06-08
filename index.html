@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>注文システム</title>
-    <!-- QRコード解析用ライブラリを読み込み -->
-    <script src="https://jsdelivr.net"></script>
     <style>
         body { font-family: sans-serif; margin: 20px; background-color: #f8f9fa; color: #333; }
         h1, h2 { text-align: center; color: #d9534f; }
@@ -19,9 +17,8 @@
         .empty-message { text-align: center; color: #777; padding: 20px; }
         .cart { margin-top: 20px; padding: 15px; background: #f0f0f0; border-radius: 6px; }
         
-        /* QRスキャン用のスタイル */
-        .scan-box { background: #e3f2fd; padding: 15px; border-radius: 6px; margin-bottom: 20px; text-align: center; }
-        #video { width: 100%; max-width: 300px; border-radius: 6px; transform: scaleX(-1); background: #222; }
+        .conn-box { background: #e3f2fd; padding: 15px; border-radius: 6px; margin-bottom: 20px; text-align: center; }
+        .conn-box textarea { width: 90%; height: 60px; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -29,12 +26,16 @@
     <h1>注文タブレット</h1>
 
     <div class="container">
-        <!-- カメラ接続エリア -->
-        <div class="panel scan-box" id="setupArea">
-            <h3>🔗 スマホと直接接続する</h3>
-            <p style="font-size:12px; margin:5px 0;">スマホ画面のQRコードをインカメラに映してください</p>
-            <video id="video" autoplay playsinline></video>
-            <canvas id="canvas" style="display:none;"></canvas>
+        <!-- 接続エリア -->
+        <div class="panel conn-box" id="setupArea">
+            <h3>🔗 スマホと直接接続する (ステップ2)</h3>
+            <p style="font-size:12px; color:blue; font-weight:bold;">1. 下の文字列をすべてコピーして、スマホ側に貼り付けてください</p>
+            <textarea id="localOffer" readonly></textarea>
+            <button class="btn" style="margin-top:5px; margin-bottom:15px; width:100%; background:#0288d1;" onclick="document.getElementById('localOffer').select(); document.execCommand('copy'); alert('コピーしました！');">コピーする</button>
+            
+            <p style="font-size:12px; color:green; font-weight:bold;">2. スマホ側で発行された「返答の合言葉」を下に貼り付けてください</p>
+            <textarea id="answerInput" placeholder="ここに合言葉を貼り付けます"></textarea>
+            <button class="btn" style="margin-top:5px; width:100%;" onclick="connectToAdmin()">接続を確定する</button>
         </div>
     </div>
 
@@ -58,8 +59,7 @@
         let peerConnection;
         let dataChannel;
 
-        // --- WebRTC接続処理（カメラQR読み取り） ---
-        const config = { iceServers: [{ urls: "stun:://google.com" }] };
+        const config = { iceServers: [] };
         
         function initWebRTC() {
             peerConnection = new RTCPeerConnection(config);
@@ -67,7 +67,6 @@
             dataChannel = peerConnection.createDataChannel("orderChannel");
             dataChannel.onopen = () => {
                 document.getElementById('setupArea').innerHTML = "<h3 style='color:green; margin:0;'>✅ スマホと接続完了！</h3>";
-                if(videoStream) videoStream.getTracks().forEach(track => track.stop());
             };
             dataChannel.onmessage = (e) => {
                 const data = JSON.parse(e.data);
@@ -78,43 +77,27 @@
                 }
             };
 
+            peerConnection.onicecandidate = (e) => {
+                if (!e.candidate) {
+                    const localOfferB64 = btoa(unescape(encodeURIComponent(JSON.stringify(peerConnection.localDescription))));
+                    document.getElementById('localOffer').value = localOfferB64;
+                }
+            };
+
             peerConnection.createOffer().then(offer => peerConnection.setLocalDescription(offer));
         }
 
-        // カメラ起動とQR解析
-        let videoStream;
-        function startCamera() {
-            const video = document.getElementById("video");
-            const canvas = document.getElementById("canvas");
-            const ctx = canvas.getContext("2d");
-
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } }).then(stream => {
-                videoStream = stream;
-                video.srcObject = stream;
-                
-                function scan() {
-                    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                        canvas.height = video.videoHeight;
-                        canvas.width = video.videoWidth;
-                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                        const code = jsQR(imageData.data, imageData.width, imageData.height);
-                        
-                        if (code) {
-                            try {
-                                const answer = JSON.parse(atob(code.data));
-                                peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-                                return; // スキャン成功で終了
-                            } catch(e) {}
-                        }
-                    }
-                    requestAnimationFrame(scan);
-                }
-                requestAnimationFrame(scan);
-            });
+        function connectToAdmin() {
+            const answerText = document.getElementById('answerInput').value.trim();
+            if(!answerText) return alert("合言葉を入力してください");
+            try {
+                const answer = JSON.parse(decodeURIComponent(escape(atob(answerText))));
+                peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+            } catch(err) {
+                alert("合言葉が正しくありません。");
+            }
         }
 
-        // --- 画面表示と注文処理 ---
         function updateDisplay() {
             menus.sort((a, b) => a.id - b.id);
             const menuListUl = document.getElementById('menuList');
@@ -177,7 +160,6 @@
         }
 
         initWebRTC();
-        startCamera();
         updateDisplay();
     </script>
 </body>
