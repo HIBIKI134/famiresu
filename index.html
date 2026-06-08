@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>注文システム</title>
+    <!-- QRコード解析用ライブラリを読み込み -->
+    <script src="https://jsdelivr.net"></script>
     <style>
         body { font-family: sans-serif; margin: 20px; background-color: #f8f9fa; color: #333; }
         h1, h2 { text-align: center; color: #d9534f; }
@@ -16,11 +18,25 @@
         .btn:hover { background: #4cae4c; }
         .empty-message { text-align: center; color: #777; padding: 20px; }
         .cart { margin-top: 20px; padding: 15px; background: #f0f0f0; border-radius: 6px; }
+        
+        /* QRスキャン用のスタイル */
+        .scan-box { background: #e3f2fd; padding: 15px; border-radius: 6px; margin-bottom: 20px; text-align: center; }
+        #video { width: 100%; max-width: 300px; border-radius: 6px; transform: scaleX(-1); background: #222; }
     </style>
 </head>
 <body>
 
     <h1>注文タブレット</h1>
+
+    <div class="container">
+        <!-- カメラ接続エリア -->
+        <div class="panel scan-box" id="setupArea">
+            <h3>🔗 スマホと直接接続する</h3>
+            <p style="font-size:12px; margin:5px 0;">スマホ画面のQRコードをインカメラに映してください</p>
+            <video id="video" autoplay playsinline></video>
+            <canvas id="canvas" style="display:none;"></canvas>
+        </div>
+    </div>
 
     <div class="container">
         <div class="panel">
@@ -37,10 +53,68 @@
     </div>
 
     <script>
-        // 💡 以前のコードにあった管理者パスワードのチェック処理（引き戻しバグの原因）を完全に消去しました
         let menus = JSON.parse(localStorage.getItem('famires_menus')) || [];
         let cart = [];
+        let peerConnection;
+        let dataChannel;
 
+        // --- WebRTC接続処理（カメラQR読み取り） ---
+        const config = { iceServers: [{ urls: "stun:://google.com" }] };
+        
+        function initWebRTC() {
+            peerConnection = new RTCPeerConnection(config);
+            
+            dataChannel = peerConnection.createDataChannel("orderChannel");
+            dataChannel.onopen = () => {
+                document.getElementById('setupArea').innerHTML = "<h3 style='color:green; margin:0;'>✅ スマホと接続完了！</h3>";
+                if(videoStream) videoStream.getTracks().forEach(track => track.stop());
+            };
+            dataChannel.onmessage = (e) => {
+                const data = JSON.parse(e.data);
+                if (data.type === "syncMenus") {
+                    menus = data.menus;
+                    localStorage.setItem('famires_menus', JSON.stringify(menus));
+                    updateDisplay();
+                }
+            };
+
+            peerConnection.createOffer().then(offer => peerConnection.setLocalDescription(offer));
+        }
+
+        // カメラ起動とQR解析
+        let videoStream;
+        function startCamera() {
+            const video = document.getElementById("video");
+            const canvas = document.getElementById("canvas");
+            const ctx = canvas.getContext("2d");
+
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } }).then(stream => {
+                videoStream = stream;
+                video.srcObject = stream;
+                
+                function scan() {
+                    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                        canvas.height = video.videoHeight;
+                        canvas.width = video.videoWidth;
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const code = jsQR(imageData.data, imageData.width, imageData.height);
+                        
+                        if (code) {
+                            try {
+                                const answer = JSON.parse(atob(code.data));
+                                peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+                                return; // スキャン成功で終了
+                            } catch(e) {}
+                        }
+                    }
+                    requestAnimationFrame(scan);
+                }
+                requestAnimationFrame(scan);
+            });
+        }
+
+        // --- 画面表示と注文処理 ---
         function updateDisplay() {
             menus.sort((a, b) => a.id - b.id);
             const menuListUl = document.getElementById('menuList');
@@ -53,10 +127,7 @@
                     const li = document.createElement('li');
                     li.className = 'menu-item';
                     li.innerHTML = `
-                        <div>
-                            <span class="menu-number">${item.id}</span>
-                            <strong>${item.name}</strong> - ${item.price}円
-                        </div>
+                        <div><span class="menu-number">${item.id}</span><strong>${item.name}</strong> - ${item.price}円</div>
                         <button class="btn" onclick="addToCart(${item.id})">注文</button>
                     `;
                     menuListUl.appendChild(li);
@@ -80,24 +151,16 @@
 
         function addToCart(id) {
             const item = menus.find(m => m.id === id);
-            if (item) {
-                cart.push(item);
-                updateDisplay();
-            }
+            if (item) { cart.push(item); updateDisplay(); }
         }
 
         function removeFromCart(index) {
-            cart.splice(index, 1);
-            updateDisplay();
+            cart.splice(index, 1); updateDisplay();
         }
 
         function submitOrder() {
-            if (cart.length === 0) {
-                alert('カートに商品が入っていません。');
-                return;
-            }
-
-            let allOrders = JSON.parse(localStorage.getItem('famires_orders')) || [];
+            if (cart.length === 0) return alert('カートに商品が入っていません。');
+            if (!dataChannel || dataChannel.readyState !== "open") return alert("スマホと接続されていません。");
 
             const newOrder = {
                 id: Date.now(),
@@ -107,19 +170,14 @@
                 status: '未対応'
             };
 
-            allOrders.push(newOrder);
-            localStorage.setItem('famires_orders', JSON.stringify(allOrders));
-
+            dataChannel.send(JSON.stringify({ type: "newOrder", order: newOrder }));
             alert('注文が完了しました！');
             cart = [];
             updateDisplay();
         }
 
-        window.addEventListener('storage', () => {
-            menus = JSON.parse(localStorage.getItem('famires_menus')) || [];
-            updateDisplay();
-        });
-
+        initWebRTC();
+        startCamera();
         updateDisplay();
     </script>
 </body>
