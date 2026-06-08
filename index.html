@@ -8,24 +8,14 @@
         body { font-family: sans-serif; margin: 20px; background-color: #f8f9fa; color: #333; }
         h1, h2 { text-align: center; color: #d9534f; }
         .container { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
-        
-        /* ユーザー側（注文画面） */
         .panel { flex: 1; min-width: 300px; max-width: 500px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         .menu-list { list-style: none; padding: 0; }
         .menu-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee; }
         .menu-number { background: #d9534f; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-right: 10px; }
         .btn { background: #5cb85c; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
         .btn:hover { background: #4cae4c; }
-        .btn-danger { background: #d9534f; }
-        .btn-danger:hover { background: #c9302c; }
-        
-        /* カート・管理者エリア */
-        .cart, .admin-panel { margin-top: 20px; padding: 15px; background: #f0f0f0; border-radius: 6px; }
-        .admin-toggle { text-align: center; margin-top: 30px; }
-        .hidden { display: none; }
-        .form-group { margin-bottom: 10px; }
-        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
-        .form-group input { width: 90%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        .empty-message { text-align: center; color: #777; padding: 20px; }
+        .cart { margin-top: 20px; padding: 15px; background: #f0f0f0; border-radius: 6px; }
     </style>
 </head>
 <body>
@@ -33,81 +23,47 @@
     <h1>🍴 ファミレス注文タブレット</h1>
 
     <div class="container">
-        <!-- 注文側画面 -->
         <div class="panel">
             <h2>メニュー一覧</h2>
-            <ul id="menuList" class="menu-list">
-                <!-- ここにメニューが自動追加されます -->
-            </ul>
+            <ul id="menuList" class="menu-list"></ul>
 
             <div class="cart">
                 <h3>🛒 注文カート</h3>
-                <ul id="cartList"></ul>
+                <ul id="cartList" style="padding-left: 20px;"></ul>
                 <p style="font-size: 1.2em; font-weight: bold; text-align: right;">合計金額: <span id="totalPrice">0</span>円</p>
                 <button class="btn" style="width: 100%; padding: 10px; font-size: 1.1em;" onclick="submitOrder()">注文を確定する</button>
             </div>
         </div>
     </div>
 
-    <!-- 管理者エリアの切り替えボタン -->
-    <div class="admin-toggle">
-        <button onclick="toggleAdmin()" style="background: #666; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">🛠️ 管理者画面を表示/非表示</button>
-    </div>
-
-    <!-- 管理者側画面 -->
-    <div id="adminPanel" class="container hidden" style="margin-top: 20px;">
-        <div class="panel" style="border: 2px dashed #d9534f;">
-            <h2>🛠️ 管理者メニュー設定</h2>
-            <div class="form-group">
-                <label>商品番号 (半角数字):</label>
-                <input type="number" id="menuId" placeholder="例: 101">
-            </div>
-            <div class="form-group">
-                <label>メニュー名:</label>
-                <input type="text" id="menuName" placeholder="例: 特製ハンバーグ">
-            </div>
-            <div class="form-group">
-                <label>価格 (円):</label>
-                <input type="number" id="menuPrice" placeholder="例: 850">
-            </div>
-            <button class="btn" style="width: 100%; margin-top: 10px;" onclick="addMenu()">✨ 新しいメニューを追加する</button>
-        </div>
-    </div>
-
     <script>
-        // 初期メニューデータ（番号、名前、価格）
-        let menus = [
-            { id: 1, name: "デミグラスハンバーグ", price: 780 },
-            { id: 2, name: "たっぷり特製カレー", price: 650 },
-            { id: 3, name: "ドリンクバー", price: 290 }
-        ];
-
+        // 保存されたメニューを読み込む
+        let menus = JSON.parse(localStorage.getItem('famires_menus')) || [];
         let cart = [];
 
-        // 画面を更新する関数
         function updateDisplay() {
-            // メニュー一覧の表示更新（番号の小さい順に並び替え）
             menus.sort((a, b) => a.id - b.id);
             const menuListUl = document.getElementById('menuList');
             menuListUl.innerHTML = '';
             
-            menus.forEach(item => {
-                const li = document.createElement('li');
-                li.className = 'menu-item';
-                li.innerHTML = `
-                    <div>
-                        <span class="menu-number">${item.id}</span>
-                        <strong>${item.name}</strong> - ${item.price}円
-                    </div>
-                    <div>
+            if (menus.length === 0) {
+                menuListUl.innerHTML = '<div class="empty-message">メニューが登録されていません。</div>';
+            } else {
+                menus.forEach(item => {
+                    const li = document.createElement('li');
+                    li.className = 'menu-item';
+                    li.innerHTML = `
+                        <div>
+                            <span class="menu-number">${item.id}</span>
+                            <strong>${item.name}</strong> - ${item.price}円
+                        </div>
                         <button class="btn" onclick="addToCart(${item.id})">注文</button>
-                        <button class="btn btn-danger hidden-admin-btn" style="display:none; margin-left:5px; padding:3px 6px; font-size:12px;" onclick="deleteMenu(${item.id})">削除</button>
-                    </div>
-                `;
-                menuListUl.appendChild(li);
-            });
+                    `;
+                    menuListUl.appendChild(li);
+                });
+            }
 
-            // カートの表示更新
+            // カート表示の修正（ここが表示されなかった原因を直しました）
             const cartListUl = document.getElementById('cartList');
             cartListUl.innerHTML = '';
             let total = 0;
@@ -121,16 +77,8 @@
             });
 
             document.getElementById('totalPrice').innerText = total;
-            
-            // 管理者モードのボタン表示状態を維持
-            const adminPanel = document.getElementById('adminPanel');
-            const deleteBtns = document.querySelectorAll('.hidden-admin-btn');
-            deleteBtns.forEach(btn => {
-                btn.style.display = adminPanel.classList.contains('hidden') ? 'none' : 'inline-block';
-            });
         }
 
-        // カートに商品を追加
         function addToCart(id) {
             const item = menus.find(m => m.id === id);
             if (item) {
@@ -139,72 +87,27 @@
             }
         }
 
-        // カートから商品を取消
         function removeFromCart(index) {
             cart.splice(index, 1);
             updateDisplay();
         }
 
-        // 注文確定
         function submitOrder() {
             if (cart.length === 0) {
                 alert('カートに商品が入っていません。');
                 return;
             }
-            alert('注文が完了しました！厨房へ送信します。');
+            alert('注文が完了しました！');
             cart = [];
             updateDisplay();
         }
 
-        // 管理者画面の表示・非表示切り替え
-        function toggleAdmin() {
-            const adminPanel = document.getElementById('adminPanel');
-            adminPanel.classList.toggle('hidden');
+        // 他のタブでメニューが追加されたときにも自動で画面更新する仕組み
+        window.addEventListener('storage', () => {
+            menus = JSON.parse(localStorage.getItem('famires_menus')) || [];
             updateDisplay();
-        }
+        });
 
-        // 管理者機能：メニューの追加
-        function addMenu() {
-            const idInput = document.getElementById('menuId');
-            const nameInput = document.getElementById('menuName');
-            const priceInput = document.getElementById('menuPrice');
-
-            const id = parseInt(idInput.value);
-            const name = nameInput.value.trim();
-            const price = parseInt(priceInput.value);
-
-            if (!id || !name || !price) {
-                alert('すべての項目を正しく入力してください。');
-                return;
-            }
-
-            // 番号の重複チェック
-            if (menus.some(m => m.id === id)) {
-                alert(`商品番号 ${id} 番はすでに使われています。別の番号にしてください。`);
-                return;
-            }
-
-            // メニュー追加
-            menus.push({ id, name, price });
-            
-            // 入力欄をクリア
-            idInput.value = '';
-            nameInput.value = '';
-            priceInput.value = '';
-
-            updateDisplay();
-            alert('新しいメニューを追加しました！');
-        }
-
-        // 管理者機能：メニューの削除
-        function deleteMenu(id) {
-            if (confirm(`商品番号 ${id} 番を削除してもよろしいですか？`)) {
-                menus = menus.filter(m => m.id !== id);
-                updateDisplay();
-            }
-        }
-
-        // 初期表示
         updateDisplay();
     </script>
 </body>
