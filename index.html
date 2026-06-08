@@ -37,7 +37,6 @@
     </div>
 
     <script>
-        // 保存されたメニューを読み込む
         let menus = JSON.parse(localStorage.getItem('famires_menus')) || [];
         let cart = [];
 
@@ -63,7 +62,6 @@
                 });
             }
 
-            // カート表示の修正（ここが表示されなかった原因を直しました）
             const cartListUl = document.getElementById('cartList');
             cartListUl.innerHTML = '';
             let total = 0;
@@ -92,17 +90,34 @@
             updateDisplay();
         }
 
+        // 💡 注文確定時の処理をアップデートしました
         function submitOrder() {
             if (cart.length === 0) {
                 alert('カートに商品が入っていません。');
                 return;
             }
-            alert('注文が完了しました！');
+
+            // 現在のすべての注文を読み込む
+            let allOrders = JSON.parse(localStorage.getItem('famires_orders')) || [];
+
+            // 新しい注文データを作成
+            const newOrder = {
+                id: Date.now(), // 注文ごとのユニークなID
+                time: new Date().toLocaleTimeString(), // 注文時間
+                items: [...cart], // 注文した商品リスト
+                total: cart.reduce((sum, item) => sum + item.price, 0),
+                status: '未対応'
+            };
+
+            // 注文を追加して保存
+            allOrders.push(newOrder);
+            localStorage.setItem('famires_orders', JSON.stringify(allOrders));
+
+            alert('注文が完了しました！厨房へ送信しました。');
             cart = [];
             updateDisplay();
         }
 
-        // 他のタブでメニューが追加されたときにも自動で画面更新する仕組み
         window.addEventListener('storage', () => {
             menus = JSON.parse(localStorage.getItem('famires_menus')) || [];
             updateDisplay();
