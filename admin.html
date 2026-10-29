@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>管理者画面 - メニュー設定 & 注文管理</title>
+    <title>管理者画面</title>
     <style>
         body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
         h1, h2 { text-align: center; color: #333; }
@@ -30,17 +30,17 @@
 <body>
 
     <div id="authLock">
-        <h2 style="margin-top: 100px;">🔒 管理者認証</h2>
+        <h2 style="margin-top: 100px;">管理者認証</h2>
         <p style="text-align:center;">このページを開くにはパスワードが必要です。</p>
     </div>
 
     <div id="adminContent" class="hidden">
-        <h1>🛠️ 管理者コントロールパネル</h1>
+        <h1>管理者コントロールパネル</h1>
 
         <!-- 接続エリア -->
         <div class="container">
             <div class="panel conn-box" id="setupArea">
-                <h3>🔗 タブレットと直接接続する (ステップ1)</h3>
+                <h3>タブレットと直接接続する (ステップ1)</h3>
                 <p style="font-size:12px; margin:5px 0;">Chromebook側の「合言葉」を、一旦ここに貼り付けてください</p>
                 <textarea id="offerInput" placeholder="ここに貼り付けます"></textarea>
                 <button class="btn" style="margin-top:10px;" onclick="acceptOffer()">合言葉を発行する</button>
@@ -49,18 +49,18 @@
 
         <div class="container">
             <div class="panel" style="border-top: 4px solid #0288d1; max-width: 600px; flex: 2;">
-                <h2>📥 受信した注文一覧</h2>
+                <h2>受信した注文一覧</h2>
                 <div id="orderList"></div>
             </div>
 
             <div class="panel" style="border-top: 4px solid #d9534f;">
-                <h2>✨ 新しいメニューを追加</h2>
+                <h2>新しいメニューを追加</h2>
                 <div class="form-group"><label>商品番号:</label><input type="number" id="menuId"></div>
                 <div class="form-group"><label>メニュー名:</label><input type="text" id="menuName"></div>
                 <div class="form-group"><label>価格 (円):</label><input type="number" id="menuPrice"></div>
                 <button class="btn" onclick="addMenu()">メニューを登録する</button>
 
-                <h2 style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 15px;">📋 登録中のメニュー</h2>
+                <h2 style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 15px;">登録中のメニュー</h2>
                 <ul id="adminMenuList" class="menu-list"></ul>
             </div>
         </div>
@@ -100,7 +100,7 @@
                     if (!e.candidate) {
                         const localAnswerB64 = btoa(unescape(encodeURIComponent(JSON.stringify(peerConnection.localDescription))));
                         document.getElementById('setupArea').innerHTML = `
-                            <h3>🔗 接続の最終ステップ</h3>
+                            <h3>接続二段階</h3>
                             <p style="font-size:12px; color:green; font-weight:bold;">下の文字列をすべてコピーして、Chromebook側に貼り付けて確定してください</p>
                             <textarea id="localAnswer" readonly>${localAnswerB64}</textarea>
                             <button class="btn" style="margin-top:10px; background:#4cae4c;" onclick="document.getElementById('localAnswer').select(); document.execCommand('copy'); alert('コピーしました！');">コピーする</button>
@@ -111,7 +111,7 @@
                 peerConnection.ondatachannel = (e) => {
                     remoteChannel = e.channel;
                     remoteChannel.onopen = () => {
-                        document.getElementById('setupArea').innerHTML = "<h3 style='color:green; margin:0;'>✅ タブレットと接続完了！</h3>";
+                        document.getElementById('setupArea').innerHTML = "<h3 style='color:green; margin:0;'>タブレットと接続完了</h3>";
                         syncMenusToCustomer();
                     };
                     remoteChannel.onmessage = (evt) => {
@@ -170,7 +170,7 @@
                 for (const id in itemCounts) { itemsHtml += `<li>【${id}】 <strong>${itemCounts[id].name}</strong> - <span style="color:#d9534f; font-weight:bold;">${itemCounts[id].count}点</span></li>`; }
                 itemsHtml += '</ul>';
 
-                card.innerHTML = `<div class="order-header"><span>⏰ 注文時刻: ${order.time}</span><span style="color:#d9534f;">状態: ${order.status}</span></div><div style="padding: 10px 0;">${itemsHtml}</div><div style="display:flex; justify-content:space-between; align-items:center; border-top:1px dashed #eee; padding-top:5px;"><span>合計金額: <strong>${order.total}円</strong></span><button class="btn" style="width:120px; padding:5px; background:#0288d1;" onclick="completeOrder(${order.id})">配膳完了 / 消去</button></div>`;
+                card.innerHTML = `<div class="order-header"><span>注文時刻: ${order.time}</span><span style="color:#d9534f;">状態: ${order.status}</span></div><div style="padding: 10px 0;">${itemsHtml}</div><div style="display:flex; justify-content:space-between; align-items:center; border-top:1px dashed #eee; padding-top:5px;"><span>合計金額: <strong>${order.total}円</strong></span><button class="btn" style="width:120px; padding:5px; background:#0288d1;" onclick="completeOrder(${order.id})">配膳完了 / 消去</button></div>`;
                 orderListDiv.appendChild(card);
             }
         }
